@@ -1,0 +1,33 @@
+feature,area,priority,original,clone,notes
+ログイン（自分だけ使えればよい）,account,must,yes,no,一般公開しないので単一ユーザーの簡単な認証で足りる
+チャットで曲の依頼を入力,agent,must,yes,no,S01 S02
+エージェントが聞き返す（ジャンル 雰囲気 歌の有無 長さ 用途）,agent,must,yes,no,選択肢ボタンつき
+エージェントが歌詞とスタイル指示を書く,agent,must,yes,no,ワークベンチに表示
+音楽生成APIを呼んで曲を作る,generation,must,yes,no,自分のキーで商用OKのAPIを使う
+生成の進行状況表示（待機 生成中 完了 失敗）,generation,must,yes,no,非同期ジョブ
+言葉で修正して新しいバージョンを作る,agent,must,yes,no,F02
+バージョンの切り替えと比較,workbench,must,yes,no,
+ブラウザで試聴（再生 停止 シーク）,player,must,yes,no,
+MP3でダウンロード,export,must,yes,no,
+プロジェクト一覧から会話を再開,library,must,yes,no,S05 F06
+生成エラー時のやり直し,generation,must,yes,no,
+自分の歌詞を貼って作る,agent,should,yes,no,F03
+歌詞とスタイル指示を手で編集,workbench,should,yes,no,
+WAVでダウンロード,export,should,yes,no,
+歌なし（インスト）を指定,generation,should,yes,no,
+曲の長さとテンポの指定,generation,should,yes,no,
+波形の表示,player,should,yes,no,
+API使用量と費用の記録,usage,should,yes,no,クレジットの代わり
+曲ごとの権利メモ（使ったAPIとその規約）,export,should,partial,no,Tuneeは生成時のプランで権利を記録している。自作版はAPIの規約を記録する
+参考音声・動画・画像を添付,agent,could,yes,no,F04
+ステム分離（ボーカル ドラム ベース他）,export,could,yes,no,別API またはオープンソースのモデル
+マスタリング,export,could,yes,no,
+複数の生成モデルを切り替える,generation,could,yes,no,Tuneeは9種類以上のモデルを使う
+プロジェクトの検索と削除,library,could,yes,no,
+料金プランとクレジット課金,billing,could,yes,skip,自分の仕事用なので不要
+MV動画の生成,video,could,yes,skip,今回の範囲外
+AIキャラクターとリップシンク,video,could,yes,skip,今回の範囲外
+音声クローン,generation,could,yes,skip,範囲外。本人以外の声は法的リスクが大きい
+自社の音楽生成モデル（TemPolor）,generation,could,yes,skip,Tuneeが持っているもの。外部APIで代わりにする
+コミュニティ フォーラム 公開ギャラリー,community,could,yes,skip,これはユーザーの集まりで 機能ではない
+著作権証明書の発行,export,could,yes,skip,Tunee独自の仕組み
