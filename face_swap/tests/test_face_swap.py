@@ -286,6 +286,23 @@ def test_other_users_data_is_invisible(app, client, ctx, tmp_path):
     assert client.get(f"/videos/{vid}/file").status_code == 404
 
 
+def test_watermark_is_top_left(tmp_path, cfg):
+    import cv2
+    from app.media import render_output
+    src = make_video(tmp_path / "plain.mp4", ident=2, seconds=1, size="720x1280")
+    out = tmp_path / "out.mp4"
+    render_output(str(src), str(out), "9:16", cfg.WATERMARK_FONT)
+    cap = cv2.VideoCapture(str(out))
+    ok, frame = cap.read()
+    assert ok
+    top_left = frame[30:70, 30:250].astype(float)
+    bottom_right = frame[1280 - 70:1280 - 30, 720 - 250:720 - 30].astype(float)
+    plain = frame[600:640, 300:420].astype(float)
+    # the white text on a dark box makes the top-left busy; the bottom-right stays as flat as the rest
+    assert top_left.std() > 40
+    assert bottom_right.std() < 5 and abs(bottom_right.mean() - plain.mean()) < 5
+
+
 # ---------- the Claude safety checker fails closed ----------
 
 class _Resp(SimpleNamespace):

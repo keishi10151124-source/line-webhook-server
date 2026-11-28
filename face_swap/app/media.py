@@ -49,8 +49,9 @@ def render_output(src: str, dest: str, aspect: str, font: str) -> int:
     vf = (
         f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
         f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,"
-        f"drawbox=x=iw-260:y=ih-74:w=240:h=50:color=black@0.55:t=fill,"
-        f"drawtext=fontfile={font}:text='{WATERMARK_TEXT}':x=w-tw-40:y=h-th-37:fontsize=28:fontcolor=white"
+        # top-left, so it never overlaps a provider's own bottom-right mark
+        f"drawtext=fontfile={font}:text='{WATERMARK_TEXT}':x=36:y=36:fontsize=28:fontcolor=white"
+        f":box=1:boxcolor=black@0.55:boxborderw=12"
     )
     r = subprocess.run(
         ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-vf", vf, "-c:v", "libx264", "-preset", "veryfast",
