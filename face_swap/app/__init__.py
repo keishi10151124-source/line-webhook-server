@@ -10,7 +10,7 @@ from flask import Flask, abort, g, request, session
 
 from .config import Config
 from .faces import get_engine
-from .models import Base, User, make_session_factory
+from .models import User, create_tables, make_session_factory
 from .providers import make_provider
 from .safety import make_checker
 from .storage import make_storage
@@ -33,7 +33,7 @@ def create_app(cfg: Config | None = None, *, engine_factory=None, checker=None, 
     if cfg.DATABASE_URL.startswith("sqlite:///"):
         Path(cfg.DATABASE_URL.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
     db_engine, Session = make_session_factory(cfg.DATABASE_URL)
-    Base.metadata.create_all(db_engine)
+    create_tables(db_engine)
 
     app.extensions["face_swap"] = ctx = {
         "cfg": cfg,

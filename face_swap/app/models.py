@@ -244,3 +244,15 @@ def make_session_factory(database_url: str):
         def _fk_on(dbapi_conn, _):
             dbapi_conn.execute("pragma foreign_keys=on")
     return engine, sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def create_tables(engine) -> None:
+    """Create tables once, even when the web processes and the worker start at the same time.
+    On Postgres a transaction-level advisory lock makes the others wait instead of colliding."""
+    if engine.dialect.name == "postgresql":
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("select pg_advisory_xact_lock(726354)"))
+            Base.metadata.create_all(conn)
+    else:
+        Base.metadata.create_all(engine)
