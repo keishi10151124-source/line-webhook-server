@@ -54,7 +54,7 @@ class Config:
         default_factory=lambda: float(os.environ.get("FACEMINT_FACE_DETECTION", "0.25")))
     # a job still running after this long is marked failed
     SWAP_TIMEOUT_MINUTES: int = field(default_factory=lambda: int(os.environ.get("SWAP_TIMEOUT_MINUTES", "120")))
-    DAILY_SPEND_LIMIT_USD: float = field(default_factory=lambda: float(os.environ.get("DAILY_SPEND_LIMIT_USD", "5")))
+    DAILY_SPEND_LIMIT_USD: float = field(default_factory=lambda: float(os.environ.get("DAILY_SPEND_LIMIT_USD", "20")))
 
     # C2PA signing (PEM). Created by scripts/make_c2pa_cert.py for personal use.
     C2PA_CERT_CHAIN_PATH: str = field(default_factory=lambda: os.environ.get("C2PA_CERT_CHAIN_PATH", str(BASE_DIR / "secrets" / "c2pa_chain.pem")))

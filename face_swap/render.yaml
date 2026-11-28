@@ -35,7 +35,7 @@ services:
   - key: FACESWAP_PRICE_PER_SECOND_USD
     sync: false
   - key: DAILY_SPEND_LIMIT_USD
-    value: '5'
+    value: '20'
   - key: R2_ENDPOINT
     sync: false
   - key: R2_BUCKET
@@ -82,7 +82,7 @@ services:
   - key: FACESWAP_PRICE_PER_SECOND_USD
     sync: false
   - key: DAILY_SPEND_LIMIT_USD
-    value: '5'
+    value: '20'
   - key: R2_ENDPOINT
     sync: false
   - key: R2_BUCKET
