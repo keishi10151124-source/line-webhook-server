@@ -299,8 +299,10 @@ def test_watermark_is_top_left(tmp_path, cfg):
     bottom_right = frame[1280 - 70:1280 - 30, 720 - 250:720 - 30].astype(float)
     plain = frame[600:640, 300:420].astype(float)
     # the white text on a dark box makes the top-left busy; the bottom-right stays as flat as the rest
-    assert top_left.std() > 40
-    assert bottom_right.std() < 5 and abs(bottom_right.mean() - plain.mean()) < 5
+    # spread is measured per colour channel, so a flat colour scores ~0
+    assert top_left.std(axis=(0, 1)).max() > 40
+    assert bottom_right.std(axis=(0, 1)).max() < 5
+    assert abs(bottom_right.mean() - plain.mean()) < 5
 
 
 # ---------- the Claude safety checker fails closed ----------
