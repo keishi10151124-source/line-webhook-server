@@ -355,7 +355,9 @@ def job_status(job_id):
 def job_cancel(job_id):
     j = _job(job_id)
     if j.status in ("queued", "submitted", "processing"):
+        from .jobs import _purge_job_files
         j.status = "cancelled"
+        _purge_job_files(g.db, j)
         g.db.commit()
     return redirect(url_for("views.job_page", job_id=j.id))
 

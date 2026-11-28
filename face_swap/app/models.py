@@ -168,6 +168,7 @@ class SwapJob(Timestamped, Base):
     idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     provider_task_id: Mapped[str | None] = mapped_column(String(128))
+    provider_price: Mapped[int | None] = mapped_column(BigInteger)  # in the provider's own unit
     safety_status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

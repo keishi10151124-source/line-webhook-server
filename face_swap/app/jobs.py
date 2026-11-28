@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from . import media
 from .faces import FaceEngineUnavailable
+from .providers import ProviderError, SwapInputs
 from .models import FacePhoto, Output, Purge, SourceVideo, SwapJob, UsageEvent, User, utcnow
 from .services import record_claude_usage
 
@@ -149,9 +150,15 @@ def create_swap(session, *, user: User, video: SourceVideo, target_index: int, a
 
 # ---------- running a swap ----------
 
+def _purge_job_files(session, job):
+    for name in ("to_face.png", "from_face.png"):
+        session.add(Purge(key=f"jobs/{job.user_id}/{job.id}/{name}"))
+
+
 def _fail(session, job, msg):
     job.status = "failed"
     job.error = msg
+    _purge_job_files(session, job)
     session.commit()
 
 
@@ -175,11 +182,11 @@ def step_swap(session, job: SwapJob, *, storage, provider, cfg, workdir: str) ->
     jobdir.mkdir(parents=True, exist_ok=True)
     try:
         if job.status == "queued":
-            src, face_img = jobdir / "src.mp4", jobdir / "face.jpg"
-            storage.get_to_file(video.video_key, src)
-            storage.get_to_file(photo.image_key, face_img)
+            inputs = _prepare_inputs(job, video, photo, target, storage=storage, provider=provider, jobdir=jobdir)
             job.attempts += 1
-            job.provider_task_id = provider.submit(str(src), str(face_img), target["box"], str(jobdir))
+            res = provider.submit(inputs)
+            job.provider_task_id = res.task_id
+            job.provider_price = res.price
             job.status = "submitted"
             job.next_poll_at = utcnow()
             session.commit()
@@ -200,8 +207,49 @@ def step_swap(session, job: SwapJob, *, storage, provider, cfg, workdir: str) ->
             job.status = "postprocessing"
             session.commit()
             _finish(session, job, res.result_path, storage=storage, cfg=cfg, jobdir=jobdir)
-    except media.MediaError as e:
+    except (media.MediaError, ProviderError) as e:
         _fail(session, job, str(e))
+
+
+TO_FACE_MAX = 1072      # Facemint: to_face PNG under 1080x1080
+FROM_FACE_SIZE = 128    # Facemint: from_face recommended 128x128 PNG
+URL_TTL = timedelta(hours=2)
+
+
+def _png(src_bytes: bytes, max_side: int, exact: bool = False) -> bytes:
+    import cv2
+    from .faces import decode_image
+
+    img = decode_image(src_bytes)
+    h, w = img.shape[:2]
+    if exact:
+        img = cv2.resize(img, (max_side, max_side), interpolation=cv2.INTER_AREA)
+    elif max(h, w) > max_side:
+        scale = max_side / max(h, w)
+        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    ok, data = cv2.imencode(".png", img)
+    return data.tobytes()
+
+
+def _prepare_inputs(job, video, photo, target, *, storage, provider, jobdir: Path):
+    """Local copies for every provider, plus short-lived URLs for providers that fetch files."""
+    src, to_face, from_face = jobdir / "src.mp4", jobdir / "to_face.png", jobdir / "from_face.png"
+    storage.get_to_file(video.video_key, src)
+    to_face.write_bytes(_png(storage.get_bytes(photo.image_key), TO_FACE_MAX))
+    from_face.write_bytes(_png(storage.get_bytes(target["thumb_key"]), FROM_FACE_SIZE, exact=True))
+
+    urls = {"video": None, "to": None, "from": None}
+    if provider.needs_urls:
+        base = f"jobs/{job.user_id}/{job.id}"
+        storage.put_file(f"{base}/to_face.png", to_face)
+        storage.put_file(f"{base}/from_face.png", from_face)
+        # deleted by _purge_job_files() once the job ends, not before: the provider fetches them later
+        urls ={"video": storage.url(video.video_key, URL_TTL),
+                "to": storage.url(f"{base}/to_face.png", URL_TTL),
+                "from": storage.url(f"{base}/from_face.png", URL_TTL)}
+    return SwapInputs(video_path=str(src), to_face_path=str(to_face), from_face_path=str(from_face),
+                      video_url=urls["video"], to_face_url=urls["to"], from_face_url=urls["from"],
+                      duration_s=float(video.duration_s or 0), workdir=str(jobdir))
 
 
 def _finish(session, job, result_path, *, storage, cfg, jobdir: Path):
@@ -219,6 +267,7 @@ def _finish(session, job, result_path, *, storage, cfg, jobdir: Path):
                            else int(job.estimated_cost_micro_usd or 0)))
     job.status = "done"
     job.estimated_cost_micro_usd = 0
+    _purge_job_files(session, job)
     session.commit()
 
 

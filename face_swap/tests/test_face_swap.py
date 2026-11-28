@@ -339,3 +339,89 @@ def test_claude_flag_blocks_and_clean_passes():
     usage = SimpleNamespace(input_tokens=10, output_tokens=5)
     assert _checker_with(_Resp(stop_reason="end_turn", parsed_output=bad, usage=usage)).check_images([b"x"], "t").passed is False
     assert _checker_with(_Resp(stop_reason="end_turn", parsed_output=ok, usage=usage)).check_images([b"x"], "t").passed is True
+
+
+# ---------- Facemint adapter (request side) ----------
+
+from app.providers import FacemintProvider, FacemintSettings, ProviderError, SwapInputs
+
+
+def _inputs(**kw):
+    base = dict(video_path="v.mp4", to_face_path="t.png", from_face_path="f.png",
+                video_url="https://r2/v.mp4?sig", to_face_url="https://r2/t.png?sig",
+                from_face_url="https://r2/f.png?sig", duration_s=4.2, workdir="/tmp")
+    base.update(kw)
+    return SwapInputs(**base)
+
+
+def test_facemint_request_swaps_only_the_chosen_person():
+    calls = []
+
+    def http(method, url, headers, body):
+        calls.append((method, url, headers, body))
+        return 201, {"code": 0, "info": "ok", "data": {"taskId": "683b", "price": 2000}}
+
+    p = FacemintProvider(FacemintSettings(api_key="k"), http=http)
+    res = p.submit(_inputs())
+    assert res.task_id == "683b" and res.price == 2000
+    method, url, headers, body = calls[0]
+    assert method == "POST" and url == "https://api.facemint.io/api/create-face-swap-task"
+    assert headers == {"x-api-key": "k"}
+    assert body["type"] == "video" and body["start_time"] == 0 and body["end_time"] == 5
+    assert body["nsfw_check"] == 1
+    assert body["swap_list"] == [{"from_face": "https://r2/f.png?sig", "to_face": "https://r2/t.png?sig"}]
+    assert body["face_recognition"] < 0.8
+    assert "callback_url" not in body
+
+
+def test_facemint_needs_urls():
+    p = FacemintProvider(FacemintSettings(api_key="k"), http=lambda *a: (201, {}))
+    with pytest.raises(ProviderError):
+        p.submit(_inputs(from_face_url=None))
+
+
+@pytest.mark.parametrize("status, resp", [
+    (201, {"code": 1, "info": "bad", "data": {}}),
+    (401, {"code": 401, "info": "unauthorized"}),
+    (201, {"code": 0, "info": "ok", "data": {}}),
+])
+def test_facemint_rejections_raise(status, resp):
+    p = FacemintProvider(FacemintSettings(api_key="k"), http=lambda *a: (status, resp))
+    with pytest.raises(ProviderError):
+        p.submit(_inputs())
+
+
+def test_facemint_needs_api_key():
+    with pytest.raises(ProviderError):
+        FacemintProvider(FacemintSettings(api_key=""))
+
+
+def test_url_provider_files_live_until_the_job_ends(client, ctx, tmp_path):
+    """Files a provider fetches by URL must not be deleted while the job is running."""
+    class UrlProvider:
+        name, needs_urls = "url_test", True
+        def submit(self, inp):
+            assert inp.to_face_url and inp.from_face_url and inp.video_url
+            return SimpleNamespace(task_id="t1", price=7)
+        def poll(self, task_id, workdir):
+            return SimpleNamespace(status="processing", result_path=None, error=None)
+
+    st = ctx["storage"]
+    st.url = lambda key, expires=None: f"https://files.example/{key}"
+    ctx["provider"] = UrlProvider()
+    register_face(client)
+    vid = _upload_video(client, tmp_path)
+    run_jobs(ctx, rounds=1)
+    loc = client.post("/swaps", data={"video_id": vid, "target_face_index": "0", "aspect": "9:16",
+                                      "idempotency_key": "u"}).headers["Location"]
+    job_id = loc.rsplit("/", 1)[-1]
+    run_jobs(ctx, rounds=3)
+    with ctx["Session"]() as s:
+        job = s.get(SwapJob, job_id)
+        assert job.status == "processing" and job.provider_price == 7
+        user_id = job.user_id
+    pngs = [st.local_path(f"jobs/{user_id}/{job_id}/{n}") for n in ("to_face.png", "from_face.png")]
+    assert all(p.exists() for p in pngs)
+    client.post(f"/swaps/{job_id}/cancel")
+    run_jobs(ctx, rounds=1)
+    assert not any(p.exists() for p in pngs)

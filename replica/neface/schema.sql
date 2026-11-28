@@ -127,6 +127,7 @@ CREATE TABLE swap_jobs (
 	idempotency_key VARCHAR(64) NOT NULL, 
 	provider VARCHAR(40) NOT NULL, 
 	provider_task_id VARCHAR(128), 
+	provider_price BIGINT, 
 	safety_status VARCHAR(16) NOT NULL, 
 	status VARCHAR(16) NOT NULL, 
 	attempts INTEGER NOT NULL, 
