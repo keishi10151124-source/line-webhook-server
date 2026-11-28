@@ -17,6 +17,8 @@ def main(once: bool = False) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = Config()
     cfg.validate()
+    from app.c2pa_cert import ensure_cert
+    ensure_cert(cfg)
     engine, Session = make_session_factory(cfg.DATABASE_URL)
     Base.metadata.create_all(engine)
     kw = dict(storage=make_storage(cfg), engine_factory=lambda: get_engine(cfg.FACE_MODELS_DIR),

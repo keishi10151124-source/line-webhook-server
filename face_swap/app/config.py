@@ -21,6 +21,9 @@ class Config:
     # the single owner account
     OWNER_EMAIL: str = field(default_factory=lambda: os.environ.get("OWNER_EMAIL", ""))
     OWNER_PASSWORD_HASH: str = field(default_factory=lambda: os.environ.get("OWNER_PASSWORD_HASH", ""))
+    # Alternative to OWNER_PASSWORD_HASH for setups without a terminal: the plain password is
+    # hashed once at startup and the plain value is dropped from this object.
+    OWNER_PASSWORD: str = field(default_factory=lambda: os.environ.get("OWNER_PASSWORD", ""), repr=False)
 
     # storage: "local" (dev) or "r2"
     STORAGE: str = field(default_factory=lambda: os.environ.get("STORAGE", "local"))
@@ -70,6 +73,16 @@ class Config:
     # run background jobs in a thread inside the web process (handy for local dev)
     RUN_JOBS_INLINE: bool = field(default_factory=lambda: _bool("RUN_JOBS_INLINE", False))
 
+    def __post_init__(self):
+        self._password_too_short = False
+        if self.OWNER_PASSWORD and not self.OWNER_PASSWORD_HASH:
+            if len(self.OWNER_PASSWORD) < 12:
+                self._password_too_short = True
+            else:
+                from werkzeug.security import generate_password_hash
+                self.OWNER_PASSWORD_HASH = generate_password_hash(self.OWNER_PASSWORD)
+        self.OWNER_PASSWORD = ""
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
@@ -77,6 +90,8 @@ class Config:
     def validate(self) -> None:
         """Refuse to start in production with development-only shortcuts."""
         problems = []
+        if self._password_too_short:
+            problems.append("OWNER_PASSWORD must be at least 12 characters")
         if not self.SECRET_KEY:
             problems.append("SECRET_KEY is not set")
         if self.is_production:
@@ -89,6 +104,6 @@ class Config:
             if self.FACESWAP_PROVIDER == "facemint" and not self.FACEMINT_API_KEY:
                 problems.append("FACEMINT_API_KEY must be set to use Facemint")
             if not (self.OWNER_EMAIL and self.OWNER_PASSWORD_HASH):
-                problems.append("OWNER_EMAIL and OWNER_PASSWORD_HASH must be set")
+                problems.append("OWNER_EMAIL and OWNER_PASSWORD (or OWNER_PASSWORD_HASH) must be set")
         if problems:
             raise RuntimeError("Invalid configuration: " + "; ".join(problems))

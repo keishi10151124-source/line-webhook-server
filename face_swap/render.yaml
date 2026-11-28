@@ -1,5 +1,5 @@
 # Render blueprint for face-swap. Secret values are entered in the Render dashboard, not here.
-# C2PA files go in Render "Secret Files" as c2pa_chain.pem and c2pa_key.pem (mounted at /etc/secrets).
+# The C2PA signing certificate is created automatically on first start.
 services:
 - type: web
   name: face-swap-web
@@ -22,7 +22,7 @@ services:
       property: connectionString
   - key: OWNER_EMAIL
     sync: false
-  - key: OWNER_PASSWORD_HASH
+  - key: OWNER_PASSWORD
     sync: false
   - key: ANTHROPIC_API_KEY
     sync: false
@@ -44,10 +44,6 @@ services:
     sync: false
   - key: R2_SECRET_ACCESS_KEY
     sync: false
-  - key: C2PA_CERT_CHAIN_PATH
-    value: /etc/secrets/c2pa_chain.pem
-  - key: C2PA_PRIVATE_KEY_PATH
-    value: /etc/secrets/c2pa_key.pem
 - type: worker
   name: face-swap-worker
   runtime: docker
@@ -69,7 +65,7 @@ services:
       property: connectionString
   - key: OWNER_EMAIL
     sync: false
-  - key: OWNER_PASSWORD_HASH
+  - key: OWNER_PASSWORD
     sync: false
   - key: ANTHROPIC_API_KEY
     sync: false
@@ -91,9 +87,5 @@ services:
     sync: false
   - key: R2_SECRET_ACCESS_KEY
     sync: false
-  - key: C2PA_CERT_CHAIN_PATH
-    value: /etc/secrets/c2pa_chain.pem
-  - key: C2PA_PRIVATE_KEY_PATH
-    value: /etc/secrets/c2pa_key.pem
 databases:
 - name: face-swap-db

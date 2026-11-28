@@ -19,6 +19,8 @@ from .storage import make_storage
 def create_app(cfg: Config | None = None, *, engine_factory=None, checker=None, provider=None, storage=None) -> Flask:
     cfg = cfg or Config()
     cfg.validate()
+    from .c2pa_cert import ensure_cert
+    ensure_cert(cfg)
 
     app = Flask(__name__)
     app.config.update(

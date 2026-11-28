@@ -576,3 +576,36 @@ def test_stuck_job_times_out(client, ctx, tmp_path):
     run_jobs(ctx, rounds=1)
     with ctx["Session"]() as s:
         assert "時間がかかりすぎた" in s.get(SwapJob, job_id).error
+
+
+# ---------- setup without a terminal ----------
+
+def test_plain_owner_password_is_hashed_and_dropped(monkeypatch):
+    from werkzeug.security import check_password_hash
+    monkeypatch.setenv("OWNER_PASSWORD", "a long enough password")
+    monkeypatch.delenv("OWNER_PASSWORD_HASH", raising=False)
+    c = Config()
+    assert c.OWNER_PASSWORD == ""
+    assert check_password_hash(c.OWNER_PASSWORD_HASH, "a long enough password")
+    assert "a long enough password" not in repr(c)
+
+
+def test_short_owner_password_is_refused(monkeypatch):
+    monkeypatch.setenv("OWNER_PASSWORD", "short")
+    monkeypatch.delenv("OWNER_PASSWORD_HASH", raising=False)
+    c = Config()
+    c.SECRET_KEY = "x"
+    with pytest.raises(RuntimeError, match="12 characters"):
+        c.validate()
+
+
+def test_c2pa_cert_is_created_on_first_start(tmp_path):
+    from app.c2pa_cert import ensure_cert
+    c = Config()
+    c.C2PA_CERT_CHAIN_PATH = str(tmp_path / "s" / "chain.pem")
+    c.C2PA_PRIVATE_KEY_PATH = str(tmp_path / "s" / "key.pem")
+    ensure_cert(c)
+    assert (tmp_path / "s" / "chain.pem").exists() and (tmp_path / "s" / "key.pem").exists()
+    before = (tmp_path / "s" / "chain.pem").read_bytes()
+    ensure_cert(c)  # does not replace an existing certificate
+    assert (tmp_path / "s" / "chain.pem").read_bytes() == before

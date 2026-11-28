@@ -37,17 +37,17 @@ TEST_DATABASE_URL=postgresql://... .venv/bin/python -m pytest -q   # Postgres �
 ## 本番（Render）
 
 `render.yaml` に、Web、Worker、Postgres の3つを定義しています。値はダッシュボードで入れてください。
+C2PA の署名用証明書は、初回の起動時に自動で作ります。
 
 | 変数 | 中身 |
 | --- | --- |
-| `OWNER_EMAIL` / `OWNER_PASSWORD_HASH` | ログインに使うメールアドレスとパスワード（パスワードは `scripts/hash_password.py` で作ったハッシュ） |
+| `OWNER_EMAIL` / `OWNER_PASSWORD` | ログインに使うメールアドレスとパスワード（12文字以上。起動時にハッシュにして、元の文字列はアプリ内に残さない。`OWNER_PASSWORD_HASH` でも可） |
 | `ANTHROPIC_API_KEY` | 安全チェックに使う Claude API のキー |
 | `FACESWAP_PROVIDER` | `facemint`（render.yaml で設定済み） |
 | `FACEMINT_API_KEY` | Facemint の APIキー（チャットには貼らず、ダッシュボードに直接入れる） |
 | `FACEMINT_FACE_RECOGNITION` | 人の見分けの厳しさ。低いほど厳しい（初期値 0.6。入れ替わらないコマが多ければ上げる） |
 | `FACESWAP_PRICE_PER_SECOND_USD` | 費用の目安の計算に使う、1秒あたりの料金 |
 | `R2_*` | Cloudflare R2 の接続情報 |
-| Secret Files | `c2pa_chain.pem` と `c2pa_key.pem` |
 
 ## まだできていないこと
 
