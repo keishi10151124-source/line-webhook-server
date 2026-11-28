@@ -16,7 +16,6 @@ from .services import record_claude_usage
 log = logging.getLogger("face_swap.jobs")
 SAME_PERSON = 0.38
 POLL_EVERY = timedelta(seconds=5)
-MAX_ATTEMPTS = 3
 
 
 class SwapError(ValueError):
@@ -192,12 +191,12 @@ def step_swap(session, job: SwapJob, *, storage, provider, cfg, workdir: str) ->
             session.commit()
 
         if job.status in ("submitted", "processing"):
+            started = job.created_at if job.created_at.tzinfo else job.created_at.replace(tzinfo=timezone.utc)
+            if utcnow() - started > timedelta(minutes=cfg.SWAP_TIMEOUT_MINUTES):
+                return _fail(session, job, "時間がかかりすぎたため、中止しました")
             res = provider.poll(job.provider_task_id, str(jobdir))
             if res.status == "failed":
-                if job.attempts < MAX_ATTEMPTS:
-                    job.status, job.provider_task_id = "queued", None
-                    session.commit()
-                    return
+                # no automatic resubmit: each submit is billed, and a content refusal would repeat
                 return _fail(session, job, res.error or "顔の入れ替えに失敗しました")
             if res.status != "done":
                 job.status = "processing"

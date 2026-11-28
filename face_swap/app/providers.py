@@ -132,19 +132,74 @@ class FacemintProvider(FaceSwapProvider):
         return body
 
     def submit(self, inp):
-        status, resp = self.http("POST", f"{self.s.base_url}/create-face-swap-task",
-                                 {"x-api-key": self.s.api_key}, self.build_request(inp))
+        body = self.build_request(inp)
+        try:
+            status, resp = self.http("POST", f"{self.s.base_url}/create-face-swap-task",
+                                     {"x-api-key": self.s.api_key}, body)
+        except (urllib.error.URLError, TimeoutError, OSError):
+            # not retried automatically: Facemint may have accepted (and billed) the task
+            raise ProviderError("Facemint に接続できませんでした。少し待ってからやり直してください")
         data = resp.get("data") or {}
         if status not in (200, 201) or resp.get("code") != 0 or not data.get("taskId"):
             raise ProviderError(f"Facemint がタスクを受け付けませんでした（{status}: {resp.get('info', '')}）")
         return SubmitResult(str(data["taskId"]), data.get("price"))
 
+    # state: -1 failed, 0 pending, 1 processing, 2 cancelled, 3 success
     def poll(self, task_id, workdir):
-        raise ProviderError("Facemint の結果の受け取り方（Get Face Swap Task Info by ID）がまだ実装されていません")
+        try:
+            status, resp = self.http("POST", f"{self.s.base_url}/get-task-info",
+                                     {"x-api-key": self.s.api_key}, {"task_id": task_id})
+        except (urllib.error.URLError, TimeoutError, OSError):
+            return PollResult("processing")           # network hiccup: ask again later
+        if status == 404:
+            return PollResult("failed", error="Facemint にタスクが見つかりません")
+        if status >= 500 or status == 429:
+            return PollResult("processing")
+        data = resp.get("data") or {}
+        if status != 200 or resp.get("code") != 0:
+            return PollResult("failed", error=f"Facemint の状態を取得できませんでした（{status}: "
+                                              f"{resp.get('info') or resp.get('message') or ''}）")
+        state = data.get("state")
+        if state in (0, 1):
+            return PollResult("processing")
+        if state == 2:
+            return PollResult("failed", error="Facemint 側でキャンセルされました")
+        if state == -1:
+            return PollResult("failed", error="Facemint での処理に失敗しました（性的な内容と判定された場合も含みます）")
+        if state != 3:
+            return PollResult("failed", error=f"Facemint から想定外の状態が返りました（{state}）")
+        file_url = (data.get("result") or {}).get("file_url")
+        if not file_url or not file_url.startswith("https://"):
+            return PollResult("failed", error="Facemint の結果に動画のURLがありません")
+        dest = f"{workdir}/{task_id}.mp4"
+        try:
+            self.download(file_url, dest)
+        except (urllib.error.URLError, TimeoutError, OSError):
+            return PollResult("processing")           # try the download again next round
+        except ProviderError as e:
+            return PollResult("failed", error=str(e))
+        return PollResult("done", dest)
+
+    MAX_RESULT_BYTES = 1024 * 1024 * 1024
+
+    def download(self, url: str, dest: str) -> None:
+        with urllib.request.urlopen(url, timeout=120) as r, open(dest, "wb") as f:
+            total = 0
+            while chunk := r.read(1024 * 1024):
+                total += len(chunk)
+                if total > self.MAX_RESULT_BYTES:
+                    raise ProviderError("Facemint の結果ファイルが大きすぎます")
+                f.write(chunk)
 
 
-# facemint is added here once poll() is written from its docs
-PROVIDERS = {"dev_passthrough": lambda cfg: DevPassthroughProvider()}
+def _facemint(cfg):
+    return FacemintProvider(FacemintSettings(
+        api_key=cfg.FACEMINT_API_KEY, resolution=cfg.FACEMINT_RESOLUTION,
+        face_recognition=cfg.FACEMINT_FACE_RECOGNITION, face_detection=cfg.FACEMINT_FACE_DETECTION,
+    ))
+
+
+PROVIDERS = {"dev_passthrough": lambda cfg: DevPassthroughProvider(), "facemint": _facemint}
 
 
 def make_provider(cfg) -> FaceSwapProvider:

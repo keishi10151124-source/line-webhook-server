@@ -425,3 +425,154 @@ def test_url_provider_files_live_until_the_job_ends(client, ctx, tmp_path):
     client.post(f"/swaps/{job_id}/cancel")
     run_jobs(ctx, rounds=1)
     assert not any(p.exists() for p in pngs)
+
+
+# ---------- Facemint adapter (result side) ----------
+
+def _task(state, file_url="https://cdn.example/out.mp4"):
+    return 200, {"code": 0, "info": "success",
+                 "data": {"id": "t", "state": state, "price": 100, "process": 50,
+                          "result": {"file_url": file_url, "thumb_url": ""}}}
+
+
+@pytest.mark.parametrize("reply, expected", [
+    (_task(0), "processing"),
+    (_task(1), "processing"),
+    ((503, {}), "processing"),
+    ((429, {}), "processing"),
+    (_task(-1), "failed"),
+    (_task(2), "failed"),
+    (_task(7), "failed"),
+    ((404, {"code": 404, "message": "not found"}), "failed"),
+    (_task(3, file_url=""), "failed"),
+    (_task(3, file_url="http://insecure/out.mp4"), "failed"),
+])
+def test_facemint_poll_states(reply, expected, tmp_path):
+    calls = []
+
+    def http(method, url, headers, body):
+        calls.append((url, body))
+        return reply
+
+    p = FacemintProvider(FacemintSettings(api_key="k"), http=http)
+    assert p.poll("t", str(tmp_path)).status == expected
+    assert calls == [("https://api.facemint.io/api/get-task-info", {"task_id": "t"})]
+
+
+def test_facemint_poll_done_downloads(tmp_path):
+    p = FacemintProvider(FacemintSettings(api_key="k"), http=lambda *a: _task(3))
+    got = []
+    p.download = lambda url, dest: (got.append(url), open(dest, "wb").write(b"video"))
+    res = p.poll("t", str(tmp_path))
+    assert res.status == "done" and open(res.result_path, "rb").read() == b"video"
+    assert got == ["https://cdn.example/out.mp4"]
+
+
+def test_facemint_network_error_on_submit_is_not_retried():
+    import urllib.error
+
+    def http(*a):
+        raise urllib.error.URLError("down")
+
+    p = FacemintProvider(FacemintSettings(api_key="k"), http=http)
+    with pytest.raises(ProviderError):
+        p.submit(_inputs())
+
+
+def test_production_facemint_needs_key():
+    c = Config()
+    c.APP_ENV, c.SECRET_KEY, c.SAFETY, c.STORAGE = "production", "x", "claude", "r2"
+    c.OWNER_EMAIL, c.OWNER_PASSWORD_HASH = "a@b", "h"
+    c.FACESWAP_PROVIDER, c.FACEMINT_API_KEY = "facemint", ""
+    with pytest.raises(RuntimeError, match="FACEMINT_API_KEY"):
+        c.validate()
+    c.FACEMINT_API_KEY = "k"
+    c.validate()
+
+
+def _facemint_in_app(ctx, http, tmp_path):
+    st = ctx["storage"]
+    st.url = lambda key, expires=None: f"https://files.example/{key}"
+    p = FacemintProvider(FacemintSettings(api_key="k"), http=http)
+    p.download = lambda url, dest: __import__("shutil").copyfile(make_video(tmp_path / "result.mp4"), dest)
+    ctx["provider"] = p
+    return p
+
+
+def _start(client, ctx, tmp_path, key):
+    register_face(client)
+    vid = _upload_video(client, tmp_path)
+    run_jobs(ctx, rounds=1)
+    loc = client.post("/swaps", data={"video_id": vid, "target_face_index": "0", "aspect": "9:16",
+                                      "idempotency_key": key}).headers["Location"]
+    return loc.rsplit("/", 1)[-1]
+
+
+def test_full_loop_with_facemint(client, ctx, tmp_path):
+    replies = iter([(201, {"code": 0, "info": "ok", "data": {"taskId": "fm1", "price": 2000}}),
+                    _task(1), _task(3)])
+    sent = []
+
+    def http(method, url, headers, body):
+        sent.append(url.rsplit("/", 1)[-1])
+        return next(replies)
+
+    _facemint_in_app(ctx, http, tmp_path)
+    job_id = _start(client, ctx, tmp_path, "fm")
+    with ctx["Session"]() as s:
+        s.get(SwapJob, job_id).next_poll_at = None
+        s.commit()
+    run_jobs(ctx, rounds=1)          # submit + first poll (processing)
+    with ctx["Session"]() as s:
+        j = s.get(SwapJob, job_id)
+        assert j.status == "processing" and j.provider_task_id == "fm1"
+        j.next_poll_at = None
+        s.commit()
+    run_jobs(ctx, rounds=1)          # second poll (done) -> watermark, C2PA, store
+    with ctx["Session"]() as s:
+        j = s.get(SwapJob, job_id)
+        assert j.status == "done", j.error
+        assert j.output.watermarked and j.output.c2pa_signed
+    assert sent == ["create-face-swap-task", "get-task-info", "get-task-info"]
+    run_jobs(ctx, rounds=1)
+    assert not any((ctx["storage"].root / "jobs").rglob("*.png"))
+
+
+def test_facemint_failure_is_not_resubmitted(client, ctx, tmp_path):
+    sent = []
+
+    def http(method, url, headers, body):
+        sent.append(url.rsplit("/", 1)[-1])
+        if url.endswith("create-face-swap-task"):
+            return 201, {"code": 0, "info": "ok", "data": {"taskId": "fm2", "price": 2000}}
+        return _task(-1)
+
+    _facemint_in_app(ctx, http, tmp_path)
+    job_id = _start(client, ctx, tmp_path, "fm2")
+    run_jobs(ctx, rounds=4)
+    with ctx["Session"]() as s:
+        j = s.get(SwapJob, job_id)
+        assert j.status == "failed" and "Facemint" in j.error
+    assert sent.count("create-face-swap-task") == 1
+
+
+def test_stuck_job_times_out(client, ctx, tmp_path):
+    from datetime import timedelta
+    from app.models import utcnow
+
+    def http(method, url, headers, body):
+        if url.endswith("create-face-swap-task"):
+            return 201, {"code": 0, "info": "ok", "data": {"taskId": "fm3", "price": 1}}
+        return _task(1)
+
+    _facemint_in_app(ctx, http, tmp_path)
+    job_id = _start(client, ctx, tmp_path, "fm3")
+    run_jobs(ctx, rounds=1)
+    with ctx["Session"]() as s:
+        j = s.get(SwapJob, job_id)
+        j.created_at = utcnow() - timedelta(minutes=ctx["cfg"].SWAP_TIMEOUT_MINUTES + 1)
+        j.next_poll_at = None
+        s.commit()
+    run_jobs(ctx, rounds=1)
+    with ctx["Session"]() as s:
+        assert "時間がかかりすぎた" in s.get(SwapJob, job_id).error

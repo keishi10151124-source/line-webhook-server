@@ -8,8 +8,8 @@ feature,area,priority,original,clone,notes
 自分の動画をアップロード（権利の確認つき）,upload,must,yes,yes,S03 F02 60秒 200MBまで
 動画の中の顔の検出,swap,must,yes,partial,OpenCV YuNet+SFaceで実装。モデルファイルをこの環境で取得できず 本物のモデルでは未確認。偽のエンジンでテスト済み
 入れ替える1人を選ぶ,swap,must,yes,yes,S04
-動画の顔入れ替えの処理（非同期）,swap,must,yes,partial,処理の流れ（キュー 状態 やり直し 書き出し）は完成。顔入れ替えAPIが未決定のため 開発用（入れ替えなし）の処理だけ
-処理の進行状況表示と失敗時のやり直し,swap,must,yes,yes,自動で3回まで再試行 画面に「もう一度ためす」
+動画の顔入れ替えの処理（非同期）,swap,must,yes,partial,Facemint の送信と結果の受け取りを実装（説明書どおり）。偽の応答でテスト済み。本物のAPIでは未確認（キーなし）
+処理の進行状況表示と失敗時のやり直し,swap,must,yes,yes,APIの失敗は自動で再送しない（1回ごとに課金されるため）。画面の「もう一度ためす」で手動。2時間で打ち切り
 AI生成の表示（見える透かし ＋ C2PAメタデータ）,output,must,no,yes,DBの制約で 透かしとC2PAがない書き出しは保存できない。C2PAの読み取りまでテスト済み
 書き出し（9:16 と 16:9 のHD）,output,must,yes,yes,720x1280 / 1280x720 切り取らずに余白で合わせる
 前後の比較プレビュー,output,should,yes,yes,S07

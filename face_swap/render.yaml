@@ -27,7 +27,11 @@ services:
   - key: ANTHROPIC_API_KEY
     sync: false
   - key: FACESWAP_PROVIDER
+    value: facemint
+  - key: FACEMINT_API_KEY
     sync: false
+  - key: FACEMINT_FACE_RECOGNITION
+    value: '0.6'
   - key: FACESWAP_PRICE_PER_SECOND_USD
     sync: false
   - key: DAILY_SPEND_LIMIT_USD
@@ -70,7 +74,11 @@ services:
   - key: ANTHROPIC_API_KEY
     sync: false
   - key: FACESWAP_PROVIDER
+    value: facemint
+  - key: FACEMINT_API_KEY
     sync: false
+  - key: FACEMINT_FACE_RECOGNITION
+    value: '0.6'
   - key: FACESWAP_PRICE_PER_SECOND_USD
     sync: false
   - key: DAILY_SPEND_LIMIT_USD

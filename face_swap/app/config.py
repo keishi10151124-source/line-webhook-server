@@ -45,6 +45,15 @@ class Config:
     FACESWAP_PRICE_PER_SECOND_USD: float = field(
         default_factory=lambda: float(os.environ.get("FACESWAP_PRICE_PER_SECOND_USD", "0.01"))
     )
+    # Facemint (FACESWAP_PROVIDER=facemint). The key is a secret: set it in the host's dashboard.
+    FACEMINT_API_KEY: str = field(default_factory=lambda: os.environ.get("FACEMINT_API_KEY", ""))
+    FACEMINT_RESOLUTION: int = field(default_factory=lambda: int(os.environ.get("FACEMINT_RESOLUTION", "2")))
+    FACEMINT_FACE_RECOGNITION: float = field(
+        default_factory=lambda: float(os.environ.get("FACEMINT_FACE_RECOGNITION", "0.6")))
+    FACEMINT_FACE_DETECTION: float = field(
+        default_factory=lambda: float(os.environ.get("FACEMINT_FACE_DETECTION", "0.25")))
+    # a job still running after this long is marked failed
+    SWAP_TIMEOUT_MINUTES: int = field(default_factory=lambda: int(os.environ.get("SWAP_TIMEOUT_MINUTES", "120")))
     DAILY_SPEND_LIMIT_USD: float = field(default_factory=lambda: float(os.environ.get("DAILY_SPEND_LIMIT_USD", "5")))
 
     # C2PA signing (PEM). Created by scripts/make_c2pa_cert.py for personal use.
@@ -77,6 +86,8 @@ class Config:
                 problems.append("FACESWAP_PROVIDER must be a real provider in production")
             if self.STORAGE != "r2":
                 problems.append("STORAGE must be 'r2' in production")
+            if self.FACESWAP_PROVIDER == "facemint" and not self.FACEMINT_API_KEY:
+                problems.append("FACEMINT_API_KEY must be set to use Facemint")
             if not (self.OWNER_EMAIL and self.OWNER_PASSWORD_HASH):
                 problems.append("OWNER_EMAIL and OWNER_PASSWORD_HASH must be set")
         if problems:

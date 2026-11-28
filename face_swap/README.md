@@ -42,11 +42,14 @@ TEST_DATABASE_URL=postgresql://... .venv/bin/python -m pytest -q   # Postgres �
 | --- | --- |
 | `OWNER_EMAIL` / `OWNER_PASSWORD_HASH` | ログインに使うメールアドレスとパスワード（パスワードは `scripts/hash_password.py` で作ったハッシュ） |
 | `ANTHROPIC_API_KEY` | 安全チェックに使う Claude API のキー |
-| `FACESWAP_PROVIDER` / `FACESWAP_PRICE_PER_SECOND_USD` | 顔入れ替えAPI（アダプターはまだ作っていません）と、1秒あたりの料金 |
+| `FACESWAP_PROVIDER` | `facemint`（render.yaml で設定済み） |
+| `FACEMINT_API_KEY` | Facemint の APIキー（チャットには貼らず、ダッシュボードに直接入れる） |
+| `FACEMINT_FACE_RECOGNITION` | 人の見分けの厳しさ。低いほど厳しい（初期値 0.6。入れ替わらないコマが多ければ上げる） |
+| `FACESWAP_PRICE_PER_SECOND_USD` | 費用の目安の計算に使う、1秒あたりの料金 |
 | `R2_*` | Cloudflare R2 の接続情報 |
 | Secret Files | `c2pa_chain.pem` と `c2pa_key.pem` |
 
 ## まだできていないこと
 
-- 本物の顔入れ替えAPIのアダプター（どのAPIを使うかが未決定）
-- 本物の顔モデル、本物の Claude API、ブラウザ側の生体確認を使った動作確認
+- 本物の Facemint、顔モデル、Claude API、ブラウザ側の生体確認を使った動作確認（どれも、偽の応答を使ったテストだけ）
+- Facemint 側のキャンセル（説明書のページがまだないため、アプリ側だけ止まる）
