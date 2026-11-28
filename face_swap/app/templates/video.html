@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}入れ替える人を選ぶ | face-swap{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('views.home') }}">← ホーム</a></p>
+<h1 class="truncate">{{ v.template.title if v.template else v.original_name }}</h1>
+
+{% if v.analysis_status in ('pending', 'analyzing') %}
+<div class="card stack" data-poll="{{ url_for('views.video_status', video_id=v.id) }}" data-poll-until="done,failed" aria-live="polite">
+  <p>動画の中の人を探して、安全チェックをしています…</p>
+  <div class="skeleton" style="width: 60%"></div>
+  <div class="skeleton" style="width: 40%"></div>
+</div>
+{% elif v.analysis_status == 'failed' %}
+<div class="flash error" role="alert">確認に失敗しました：{{ v.analysis_error }}</div>
+{% elif v.safety_status == 'blocked' %}
+<div class="flash error" role="alert">この動画は使えません：{{ (v.safety_result or {}).get('reason', '安全チェックを通りませんでした') }}</div>
+{% elif not v.detected_faces %}
+<div class="flash error" role="alert">動画の中に顔が見つかりませんでした。顔がはっきり映っている動画を使ってください。</div>
+{% else %}
+<div class="card stack">
+  <video controls preload="metadata" src="{{ url_for('views.video_file', video_id=v.id) }}"></video>
+  {% if not photos %}
+    <p class="notice">先に<a href="{{ url_for('views.face_page') }}">自分の顔を登録</a>してください。</p>
+  {% else %}
+  <form method="post" action="{{ url_for('views.start_swap') }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="video_id" value="{{ v.id }}">
+    <input type="hidden" name="idempotency_key" value="{{ idem }}">
+    <fieldset style="border:0;padding:0;margin:0">
+      <legend style="font-weight:600;margin-bottom:var(--space-2)">誰の顔を自分の顔にしますか？（1人だけ）</legend>
+      <div class="people">
+        {% for p in v.detected_faces %}
+        <label>
+          <input type="radio" name="target_face_index" value="{{ p.index }}" {% if loop.first %}checked{% endif %} required>
+          <img class="face-thumb" src="{{ url_for('views.person_thumb', video_id=v.id, idx=p.index) }}" alt="{{ loop.index }}人目">
+          <span class="muted">{{ loop.index }}人目・{{ p.frames }}コマ</span>
+        </label>
+        {% endfor %}
+      </div>
+      <p class="muted">選ばなかった人の顔は、そのまま残ります。</p>
+    </fieldset>
+    {% if photos|length > 1 %}
+    <div>
+      <label for="photo_id">使う自分の写真</label>
+      <select id="photo_id" name="photo_id">
+        {% for ph in photos %}<option value="{{ ph.id }}" {% if ph.is_primary %}selected{% endif %}>{{ 'カメラで撮影' if ph.source == 'camera' else 'アップロードした写真' }}{{ '（いつもの）' if ph.is_primary }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div>
+      <label for="aspect">書き出しの向き</label>
+      <select id="aspect" name="aspect">
+        <option value="9:16" {% if aspect_guess != '16:9' %}selected{% endif %}>縦 9:16（720×1280）</option>
+        <option value="16:9" {% if aspect_guess == '16:9' %}selected{% endif %}>横 16:9（1280×720）</option>
+      </select>
+    </div>
+    {% if est_usd is not none %}<p class="muted">長さ {{ v.duration_s }}秒・費用の目安 約${{ '%.2f'|format(est_usd) }}</p>{% endif %}
+    <p class="muted">書き出す動画には「AI-GENERATED」の透かしと、AIで作ったことを示すメタデータ（C2PA）が必ず入ります。</p>
+    <button class="btn primary" type="submit" data-busy-label="開始しています…">入れ替えを始める</button>
+  </form>
+  {% endif %}
+</div>
+{% if not v.template %}
+<details class="card" style="margin-top: var(--space-4);">
+  <summary>この動画をテンプレートにする</summary>
+  <form method="post" action="{{ url_for('views.make_template', video_id=v.id) }}" class="stack" style="margin-top: var(--space-3);">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div><label for="title">名前</label><input id="title" name="title" type="text" maxlength="120" required></div>
+    <div><label for="category">カテゴリ（任意）</label><input id="category" name="category" type="text" maxlength="60"></div>
+    <div><label for="license_note">素材の権利についてのメモ</label><input id="license_note" name="license_note" type="text" maxlength="300" required placeholder="例：自分で撮影 / ストック素材（モデルリリースあり）"></div>
+    <button class="btn" type="submit">テンプレートにする</button>
+  </form>
+</details>
+{% endif %}
+{% endif %}
+<form method="post" action="{{ url_for('views.delete_video', video_id=v.id) }}" style="margin-top: var(--space-5);" data-confirm="この動画を削除しますか？">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button class="btn danger" type="submit">この動画を削除</button>
+</form>
+{% endblock %}

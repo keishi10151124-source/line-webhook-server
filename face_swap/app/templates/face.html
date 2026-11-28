@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}自分の顔 | face-swap{% endblock %}
+{% block content %}
+<h1>自分の顔</h1>
+<p class="muted">入れ替えに使えるのは、あなた本人の顔だけです。最初にカメラで撮影して本人の顔を登録し、そのあと同じ人の写真だけを追加できます。</p>
+
+{% if not engine_ok %}
+<div class="flash error" role="alert">顔の確認機能が使えません：{{ engine_error }}</div>
+{% endif %}
+
+{% if not face %}
+<section class="card stack" aria-labelledby="cam-h">
+  <h2 id="cam-h" style="margin-top:0">カメラで登録する</h2>
+  <p class="muted">画面の指示に合わせて、正面を見る・顔を左右に向ける・まばたきをしてください。写真や画面を映したものは登録できません。</p>
+  <div class="cam">
+    <video id="cam" autoplay playsinline muted aria-label="カメラの映像"></video>
+    <div class="prompt" id="prompt" aria-live="assertive">「撮影を始める」を押してください</div>
+  </div>
+  <ol class="steps" id="steps" aria-label="確認の手順"></ol>
+  <div class="row">
+    <button class="btn primary" id="start" type="button" {% if not engine_ok %}disabled{% endif %}>撮影を始める</button>
+    <button class="btn" id="retry" type="button" hidden>やり直す</button>
+  </div>
+  <p id="result" role="status"></p>
+</section>
+{% else %}
+<section class="card stack" aria-labelledby="photos-h">
+  <h2 id="photos-h" style="margin-top:0">登録済みの写真</h2>
+  <div class="grid">
+    {% for p in face.photos %}
+    <div class="card stack">
+      <img class="face-thumb" src="{{ url_for('views.face_photo_file', photo_id=p.id) }}" alt="{{ 'カメラで撮影した顔' if p.source == 'camera' else 'アップロードした顔写真' }}">
+      <div>
+        {% if p.source == 'camera' %}<span class="badge ok">カメラで本人確認</span>
+        {% else %}<span class="badge ok">本人と一致 {{ '%.2f'|format(p.match_score) }}</span>{% endif %}
+        {% if p.is_primary %}<span class="badge wait">いつも使う</span>{% endif %}
+      </div>
+      <div class="row">
+        {% if not p.is_primary %}
+        <form method="post" action="{{ url_for('views.face_photo_primary', photo_id=p.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn" type="submit">いつも使う</button>
+        </form>
+        {% endif %}
+        {% if p.source == 'upload' %}
+        <form method="post" action="{{ url_for('views.face_photo_delete', photo_id=p.id) }}" data-confirm="この写真を削除しますか？">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn danger" type="submit">削除</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card stack" aria-labelledby="up-h" style="margin-top: var(--space-4);">
+  <h2 id="up-h" style="margin-top:0">写真を追加する</h2>
+  <p class="muted">明るくはっきり写った写真を使うと、仕上がりがよくなります。追加できるのは、カメラで登録した顔と同じ人だと確認できた写真だけです。一致しなかった写真は保存しません。</p>
+  <form method="post" action="{{ url_for('views.face_photo_upload') }}" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div><label for="photo">写真（JPEG・PNG・WebP、{{ max_photo_mb }}MBまで、自分1人だけが写っているもの）</label>
+      <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required></div>
+    <button class="btn primary" type="submit" data-busy-label="確認中…" {% if not engine_ok %}disabled{% endif %}>本人か確認して追加する</button>
+  </form>
+</section>
+
+<section class="card stack" style="margin-top: var(--space-4);">
+  <h2 style="margin-top:0">顔を削除する</h2>
+  <p class="muted">顔の写真と特徴データをすべて消します。使うときは、もう一度カメラで登録してください。</p>
+  <form method="post" action="{{ url_for('views.face_delete') }}" data-confirm="顔の写真と特徴データをすべて削除しますか？">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn danger" type="submit">顔を削除</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if not face and engine_ok %}<script type="module" src="{{ url_for('static', filename='face.js') }}"></script>{% endif %}{% endblock %}

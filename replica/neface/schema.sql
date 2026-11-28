@@ -1,128 +1,201 @@
--- face-swap schema (Postgres 13+). All times UTC timestamptz.
+-- face-swap schema for Postgres, generated from face_swap/app/models.py (the source of truth).
 -- Access rule: every query goes through the data layer's owner check (no RLS).
--- Only the owner's own face, captured by camera with a liveness check, can be used.
+-- Only the owner's own face: camera + liveness, plus uploaded photos that matched it.
 
-create extension if not exists pgcrypto;
-
-create table users (
-  id uuid primary key default gen_random_uuid(),
-  email text not null unique,
-  password_hash text not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+CREATE TABLE purges (
+	id VARCHAR(36) NOT NULL, 
+	key VARCHAR(512) NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id)
 );
 
--- one face per user, camera capture + liveness only
-create table faces (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null unique references users(id) on delete cascade,
-  source text not null default 'camera' check (source = 'camera'),
-  image_key text not null,
-  embedding bytea,
-  liveness_challenge_id text not null unique,
-  liveness_passed_at timestamptz not null,
-  age_check_passed boolean not null check (age_check_passed),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+CREATE TABLE users (
+	id VARCHAR(36) NOT NULL, 
+	email VARCHAR(320) NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (email)
 );
 
-create table source_videos (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  kind text not null check (kind in ('template','upload')),
-  video_key text not null,
-  bytes bigint not null check (bytes > 0),
-  duration_s numeric(7,2) check (duration_s > 0),
-  aspect text check (aspect in ('9:16','16:9','other')),
-  rights_confirmed boolean not null check (rights_confirmed),
-  rights_note text,
-  detected_faces jsonb not null default '[]',
-  analysis_status text not null default 'pending'
-    check (analysis_status in ('pending','analyzing','done','failed')),
-  safety_status text not null default 'pending'
-    check (safety_status in ('pending','passed','blocked')),
-  safety_result jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+CREATE TABLE faces (
+	id VARCHAR(36) NOT NULL, 
+	user_id VARCHAR(36) NOT NULL, 
+	source VARCHAR(16) NOT NULL, 
+	liveness_challenge_id VARCHAR(64) NOT NULL, 
+	liveness_passed_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	age_check_passed BOOLEAN NOT NULL, 
+	embedding BYTEA NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT face_camera_only CHECK (source = 'camera'), 
+	CONSTRAINT face_age_check CHECK (age_check_passed), 
+	UNIQUE (user_id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	UNIQUE (liveness_challenge_id)
 );
-create index on source_videos (user_id, created_at desc);
-create index on source_videos (analysis_status);
 
-create table templates (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  source_video_id uuid not null unique references source_videos(id) on delete cascade,
-  title text not null,
-  category text,
-  license_note text not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+CREATE TABLE liveness_challenges (
+	id VARCHAR(64) NOT NULL, 
+	user_id VARCHAR(36) NOT NULL, 
+	steps JSON NOT NULL, 
+	expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	used_at TIMESTAMP WITH TIME ZONE, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
 );
-create index on templates (user_id, category);
 
-create table swap_jobs (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  source_video_id uuid not null references source_videos(id) on delete cascade,
-  face_id uuid references faces(id) on delete set null,
-  target_face_index integer not null check (target_face_index >= 0),
-  aspect text not null check (aspect in ('9:16','16:9')),
-  idempotency_key text not null,
-  provider text not null,
-  provider_task_id text,
-  safety_status text not null default 'pending'
-    check (safety_status in ('pending','passed','blocked')),
-  status text not null default 'queued'
-    check (status in ('queued','submitted','processing','postprocessing','done','failed','blocked','cancelled')),
-  -- nothing goes to the provider unless safety passed
-  constraint safety_before_submit check (
-    status in ('queued','failed','blocked','cancelled') or safety_status = 'passed'
-  ),
-  -- a job can only be submitted while a face exists
-  constraint face_required_to_run check (
-    status in ('queued','done','failed','blocked','cancelled') or face_id is not null
-  ),
-  attempts integer not null default 0,
-  error text,
-  estimated_seconds numeric(7,2),
-  locked_at timestamptz,
-  next_poll_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (user_id, idempotency_key),
-  unique (provider, provider_task_id)
-);
-create index on swap_jobs (status, next_poll_at);
-create index on swap_jobs (user_id, created_at desc);
-create index on swap_jobs (source_video_id);
-create index on swap_jobs (face_id);
+CREATE INDEX ix_liveness_challenges_user_id ON liveness_challenges (user_id);
 
-create table outputs (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  job_id uuid not null unique references swap_jobs(id) on delete cascade,
-  video_key text not null,
-  aspect text not null check (aspect in ('9:16','16:9')),
-  height integer not null check (height >= 720),
-  -- AI labeling cannot be turned off
-  watermarked boolean not null check (watermarked),
-  c2pa_signed boolean not null check (c2pa_signed),
-  c2pa_manifest_key text not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+CREATE TABLE source_videos (
+	id VARCHAR(36) NOT NULL, 
+	user_id VARCHAR(36) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	original_name VARCHAR(255) NOT NULL, 
+	video_key VARCHAR(512) NOT NULL, 
+	bytes BIGINT NOT NULL, 
+	duration_s NUMERIC(7, 2), 
+	width INTEGER, 
+	height INTEGER, 
+	rights_confirmed BOOLEAN NOT NULL, 
+	rights_note TEXT, 
+	detected_faces JSON NOT NULL, 
+	analysis_status VARCHAR(16) NOT NULL, 
+	analysis_error TEXT, 
+	safety_status VARCHAR(16) NOT NULL, 
+	safety_result JSON, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT video_kind CHECK (kind in ('template','upload')), 
+	CONSTRAINT video_rights_confirmed CHECK (rights_confirmed), 
+	CONSTRAINT video_bytes_positive CHECK (bytes > 0), 
+	CONSTRAINT video_analysis_status CHECK (analysis_status in ('pending','analyzing','done','failed')), 
+	CONSTRAINT video_safety_status CHECK (safety_status in ('pending','passed','blocked')), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
 );
-create index on outputs (user_id, created_at desc);
 
-create table usage_events (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  job_id uuid references swap_jobs(id) on delete set null,
-  service text not null check (service in ('faceswap','claude','storage')),
-  units numeric not null,
-  unit text not null,              -- seconds, tokens_in, tokens_out, bytes
-  cost_micro_usd bigint not null default 0 check (cost_micro_usd >= 0),
-  currency text not null default 'USD',
-  created_at timestamptz not null default now()
+CREATE INDEX ix_source_videos_user_created ON source_videos (user_id, created_at);
+CREATE INDEX ix_source_videos_analysis_status ON source_videos (analysis_status);
+
+CREATE TABLE face_photos (
+	id VARCHAR(36) NOT NULL, 
+	face_id VARCHAR(36) NOT NULL, 
+	source VARCHAR(16) NOT NULL, 
+	image_key VARCHAR(512) NOT NULL, 
+	match_score FLOAT, 
+	match_threshold FLOAT NOT NULL, 
+	safety_status VARCHAR(16) NOT NULL, 
+	is_primary BOOLEAN NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT photo_source CHECK (source in ('camera','upload')), 
+	CONSTRAINT upload_must_match_camera_face CHECK (source = 'camera' or (match_score is not null and match_score >= match_threshold)), 
+	CONSTRAINT photo_safety_passed CHECK (safety_status = 'passed'), 
+	FOREIGN KEY(face_id) REFERENCES faces (id) ON DELETE CASCADE
 );
-create index on usage_events (user_id, created_at);
-create index on usage_events (job_id);
+
+CREATE INDEX ix_face_photos_face_id ON face_photos (face_id);
+
+CREATE TABLE templates (
+	id VARCHAR(36) NOT NULL, 
+	user_id VARCHAR(36) NOT NULL, 
+	source_video_id VARCHAR(36) NOT NULL, 
+	title VARCHAR(120) NOT NULL, 
+	category VARCHAR(60), 
+	license_note TEXT NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	UNIQUE (source_video_id), 
+	FOREIGN KEY(source_video_id) REFERENCES source_videos (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_templates_user_id ON templates (user_id);
+
+CREATE TABLE swap_jobs (
+	id VARCHAR(36) NOT NULL, 
+	user_id VARCHAR(36) NOT NULL, 
+	source_video_id VARCHAR(36) NOT NULL, 
+	face_photo_id VARCHAR(36), 
+	target_face_index INTEGER NOT NULL, 
+	aspect VARCHAR(8) NOT NULL, 
+	idempotency_key VARCHAR(64) NOT NULL, 
+	provider VARCHAR(40) NOT NULL, 
+	provider_task_id VARCHAR(128), 
+	safety_status VARCHAR(16) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	attempts INTEGER NOT NULL, 
+	error TEXT, 
+	estimated_seconds NUMERIC(7, 2), 
+	estimated_cost_micro_usd BIGINT, 
+	locked_at TIMESTAMP WITH TIME ZONE, 
+	next_poll_at TIMESTAMP WITH TIME ZONE, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT job_aspect CHECK (aspect in ('9:16','16:9')), 
+	CONSTRAINT job_target_index CHECK (target_face_index >= 0), 
+	CONSTRAINT job_safety_status CHECK (safety_status in ('pending','passed','blocked')), 
+	CONSTRAINT job_status CHECK (status in ('queued','submitted','processing','postprocessing','done','failed','blocked','cancelled')), 
+	CONSTRAINT safety_before_submit CHECK (status in ('queued','failed','blocked','cancelled') or safety_status = 'passed'), 
+	CONSTRAINT face_required_to_run CHECK (status in ('queued','done','failed','blocked','cancelled') or face_photo_id is not null), 
+	CONSTRAINT job_idempotency UNIQUE (user_id, idempotency_key), 
+	CONSTRAINT job_provider_task UNIQUE (provider, provider_task_id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	FOREIGN KEY(source_video_id) REFERENCES source_videos (id) ON DELETE CASCADE, 
+	FOREIGN KEY(face_photo_id) REFERENCES face_photos (id) ON DELETE SET NULL
+);
+
+CREATE INDEX ix_swap_jobs_status_poll ON swap_jobs (status, next_poll_at);
+CREATE INDEX ix_swap_jobs_source_video_id ON swap_jobs (source_video_id);
+CREATE INDEX ix_swap_jobs_face_photo_id ON swap_jobs (face_photo_id);
+CREATE INDEX ix_swap_jobs_user_created ON swap_jobs (user_id, created_at);
+
+CREATE TABLE outputs (
+	id VARCHAR(36) NOT NULL, 
+	user_id VARCHAR(36) NOT NULL, 
+	job_id VARCHAR(36) NOT NULL, 
+	video_key VARCHAR(512) NOT NULL, 
+	aspect VARCHAR(8) NOT NULL, 
+	height INTEGER NOT NULL, 
+	watermarked BOOLEAN NOT NULL, 
+	c2pa_signed BOOLEAN NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT output_aspect CHECK (aspect in ('9:16','16:9')), 
+	CONSTRAINT output_hd CHECK (height >= 720), 
+	CONSTRAINT output_watermarked CHECK (watermarked), 
+	CONSTRAINT output_c2pa_signed CHECK (c2pa_signed), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	UNIQUE (job_id), 
+	FOREIGN KEY(job_id) REFERENCES swap_jobs (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_outputs_user_created ON outputs (user_id, created_at);
+
+CREATE TABLE usage_events (
+	id VARCHAR(36) NOT NULL, 
+	user_id VARCHAR(36) NOT NULL, 
+	job_id VARCHAR(36), 
+	service VARCHAR(16) NOT NULL, 
+	units NUMERIC NOT NULL, 
+	unit VARCHAR(16) NOT NULL, 
+	cost_micro_usd BIGINT NOT NULL, 
+	currency VARCHAR(3) NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT usage_service CHECK (service in ('faceswap','claude','storage')), 
+	CONSTRAINT usage_cost_positive CHECK (cost_micro_usd >= 0), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	FOREIGN KEY(job_id) REFERENCES swap_jobs (id) ON DELETE SET NULL
+);
+
+CREATE INDEX ix_usage_events_job_id ON usage_events (job_id);
+CREATE INDEX ix_usage_user_created ON usage_events (user_id, created_at);
+

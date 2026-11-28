@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}仕上がり | face-swap{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('views.library') }}">← 作品</a></p>
+{% set running = job.status in ('queued', 'submitted', 'processing', 'postprocessing') %}
+{% if running %}
+<h1>作っています</h1>
+<div class="card stack" data-poll="{{ url_for('views.job_status', job_id=job.id) }}" data-poll-until="done,failed,blocked,cancelled" aria-live="polite">
+  <progress aria-label="進み具合"></progress>
+  <p>{{ {'queued':'順番を待っています','submitted':'顔を入れ替えています','processing':'顔を入れ替えています','postprocessing':'AI生成の表示を入れて書き出しています'}[job.status] }}…</p>
+  <p class="muted">このページは閉じても大丈夫です。作品一覧からあとで見られます。</p>
+  <form method="post" action="{{ url_for('views.job_cancel', job_id=job.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn" type="submit">キャンセル</button>
+  </form>
+</div>
+{% elif job.status == 'done' and job.output %}
+<h1>できあがり</h1>
+<div class="card stack">
+  <div class="row" style="align-items: stretch;">
+    <div style="flex: 1 1 280px"><p class="muted">元の動画</p><video controls preload="metadata" src="{{ url_for('views.video_file', video_id=job.source_video_id) }}"></video></div>
+    <div style="flex: 1 1 280px"><p class="muted">入れ替えたあと</p><video controls preload="metadata" src="{{ url_for('views.output_view', oid=job.output.id) }}"></video></div>
+  </div>
+  <p><span class="badge ok">「AI-GENERATED」の透かしあり</span> <span class="badge ok">C2PA メタデータあり</span></p>
+  <a class="btn primary" href="{{ url_for('views.output_download', oid=job.output.id) }}">ダウンロード（{{ job.output.aspect }}・{{ job.output.height }}p）</a>
+</div>
+{% else %}
+<h1>作れませんでした</h1>
+<div class="flash error" role="alert">
+  {% if job.status == 'blocked' %}安全チェックを通らなかったため、処理しませんでした。
+  {% elif job.status == 'cancelled' %}キャンセルしました。
+  {% else %}{{ job.error or '失敗しました' }}{% endif %}
+</div>
+<a class="btn" href="{{ url_for('views.video_page', video_id=job.source_video_id) }}">もう一度ためす</a>
+{% endif %}
+{% endblock %}

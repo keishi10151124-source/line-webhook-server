@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}動画を追加 | face-swap{% endblock %}
+{% block content %}
+<h1>自分の動画を追加</h1>
+<form class="card stack" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div>
+    <label for="video">動画（MP4・MOV・WebM、{{ max_seconds }}秒・{{ max_mb }}MBまで）</label>
+    <input id="video" name="video" type="file" accept="video/mp4,video/quicktime,video/webm" required>
+  </div>
+  <div>
+    <label class="check"><input type="checkbox" name="rights_confirmed" value="1" required>
+      <span>この動画は自分で撮ったものか、使う権利があるものです。映っている人の了解も取っています。</span></label>
+  </div>
+  <div>
+    <label for="rights_note">権利についてのメモ（任意）</label>
+    <input id="rights_note" name="rights_note" type="text" maxlength="300" placeholder="例：2026年11月に自分で撮影">
+  </div>
+  <button class="btn primary" type="submit" data-busy-label="アップロード中…">アップロードして確認する</button>
+  <p class="muted">アップロードすると、動画の中の人を見つけて、安全チェックをします。</p>
+</form>
+{% endblock %}

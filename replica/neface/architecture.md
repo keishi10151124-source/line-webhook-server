@@ -46,6 +46,13 @@ music-agent（Tunee の作り直し）と同じ構成にそろえます。
 
 アダプターの形：`FaceSwapProvider.submit(source_video_url, face_image_url, target_face_index|bbox) -> task_id`, `.poll(task_id) -> status, result_url`, `.terms_note`。
 
+### 2026-11-28 の変更：顔写真のアップロード
+
+- 最初の登録はカメラだけ。そのあとに追加する写真は、カメラで登録した顔と SFace の類似度（cosine）が `FACE_MATCH_THRESHOLD`（初期値 0.45。OpenCV が公表している目安は 0.363）以上のときだけ保存する。
+- 写真は `face_photos` テーブルに保存する（`source = camera | upload`）。DB の制約で、`upload` は一致度がしきい値以上の写真しか入らない。
+- 入れ替えに使う写真は、登録済みの写真から選べる（「いつも使う」写真が初期値）。
+- 本番は Docker で動かす（ffmpeg とフォントが必要なため）。`face_swap/Dockerfile` と `face_swap/render.yaml` を参照。
+
 ## Schema
 
 テーブル数：7。アクセス制御：データ層で確認します（すべての読み書きを `owned_by(user)` を通す）。

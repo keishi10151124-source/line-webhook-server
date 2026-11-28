@@ -1,28 +1,27 @@
 feature,area,priority,original,clone,notes
-ログイン（自分だけ使えればよい）,account,must,yes,no,
-自分の顔の登録,faces,must,yes,no,S05 F03 元のアプリは写真のアップロード
-カメラ撮影だけで登録（ファイルのアップロードは不可）,faces,must,no,no,他人の写真を登録できないようにする。この作り直しで追加
-生体確認（左右を向く まばたき）,faces,must,no,no,写真や画面を映したものを弾く。この作り直しで追加
-未成年と性的内容の検出と停止,safety,must,no,no,入れ替えの前に止める。この作り直しで追加
-テンプレート動画を選ぶ,templates,must,yes,no,素材は自分で用意する
-自分の動画をアップロード（権利の確認つき）,upload,must,yes,no,S03 F02
-動画の中の顔の検出,swap,must,yes,no,S04
-入れ替える1人を選ぶ,swap,must,yes,no,S04
-動画の顔入れ替えの処理（非同期）,swap,must,yes,no,S06
-処理の進行状況表示と失敗時のやり直し,swap,must,yes,no,
-AI生成の表示（見える透かし ＋ C2PAメタデータ）,output,must,no,no,常にオン。外せない。この作り直しで追加
-書き出し（9:16 と 16:9 のHD）,output,must,yes,no,S07
-前後の比較プレビュー,output,should,yes,no,
-作品一覧と削除,library,should,yes,no,S08
-顔データの完全削除,faces,should,no,no,F04 この作り直しで追加
-処理費用の記録,usage,should,no,no,課金の代わり
-テンプレートのカテゴリ分け,templates,could,yes,no,
-処理のキャンセル,swap,could,yes,no,
-2〜4人の同時入れ替え,swap,could,yes,skip,使えるのは本人の顔1つだけなので不要
+ログイン（自分だけ使えればよい）,account,must,yes,yes,パスワードのハッシュを環境変数に置く。失敗10回で10分止める
+自分の顔の登録,faces,must,yes,yes,S05 F03
+最初の登録はカメラ撮影（その後は一致した写真のアップロードも可）,faces,must,no,yes,2026-11-28変更。写真はカメラで登録した顔と一致（類似度0.45以上）した場合だけ保存。一致しない写真は保存しない
+生体確認（左右を向く まばたき）,faces,must,no,partial,サーバー側の確認（1回限りの手順 顔の数 向き 同一人物）はテスト済み。ブラウザ側（MediaPipe）はこの環境からCDNに届かず未確認
+未成年と性的内容の検出と停止,safety,must,no,partial,Claude APIで判定。失敗 拒否 エラーはすべて止める側に倒す。偽のAPI応答でテスト済み。本物のAPIでは未確認（キーなし）
+テンプレート動画を選ぶ,templates,must,yes,yes,自分の動画を「テンプレートにする」で追加。素材の権利メモ必須
+自分の動画をアップロード（権利の確認つき）,upload,must,yes,yes,S03 F02 60秒 200MBまで
+動画の中の顔の検出,swap,must,yes,partial,OpenCV YuNet+SFaceで実装。モデルファイルをこの環境で取得できず 本物のモデルでは未確認。偽のエンジンでテスト済み
+入れ替える1人を選ぶ,swap,must,yes,yes,S04
+動画の顔入れ替えの処理（非同期）,swap,must,yes,partial,処理の流れ（キュー 状態 やり直し 書き出し）は完成。顔入れ替えAPIが未決定のため 開発用（入れ替えなし）の処理だけ
+処理の進行状況表示と失敗時のやり直し,swap,must,yes,yes,自動で3回まで再試行 画面に「もう一度ためす」
+AI生成の表示（見える透かし ＋ C2PAメタデータ）,output,must,no,yes,DBの制約で 透かしとC2PAがない書き出しは保存できない。C2PAの読み取りまでテスト済み
+書き出し（9:16 と 16:9 のHD）,output,must,yes,yes,720x1280 / 1280x720 切り取らずに余白で合わせる
+前後の比較プレビュー,output,should,yes,yes,S07
+作品一覧と削除,library,should,yes,yes,S08
+顔データの完全削除,faces,should,no,yes,F04 写真と特徴データを削除し ファイルも消す。処理中のジョブは止まる
+処理費用の記録,usage,should,no,yes,顔入れ替えの秒数とClaudeのトークン。1日の上限つき
+テンプレートのカテゴリ分け,templates,could,yes,yes,
+処理のキャンセル,swap,could,yes,yes,アプリ側の処理は止まる。APIに取り消しを送る処理は本物のAPIを決めてから
+2〜4人の同時入れ替え,swap,could,yes,skip,使えるのは本人の顔だけなので不要
 他人の顔を使う（同意ありでも）,swap,could,yes,skip,作らない。2026-11-27に書面同意の仕組みを削除
 写真の顔入れ替え,photo,could,yes,skip,今回は選ばなかった範囲
 AI動画生成とAI音楽,generation,could,yes,skip,今回の範囲外。AI音楽はTuneeの作り直しで作る
 元のアプリのテンプレート素材,templates,could,yes,skip,NeFaceの素材で 映っている人の権利も関わる
 透かしを外す,output,could,yes,skip,作らない
 週額 年額のサブスクとコイン課金,billing,could,yes,skip,自分の仕事用なので不要
-写真ファイルからの顔登録,faces,could,yes,skip,他人の写真を登録できてしまうので作らない

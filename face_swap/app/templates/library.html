@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}作品 | face-swap{% endblock %}
+{% block content %}
+<h1>作品</h1>
+{% if outputs %}
+<div class="grid">
+  {% for o in outputs %}
+  <div class="card stack">
+    <video preload="metadata" controls src="{{ url_for('views.output_view', oid=o.id) }}" aria-label="作品 {{ o.created_at.strftime('%Y-%m-%d %H:%M') }}"></video>
+    <div class="muted">{{ o.created_at.strftime('%Y-%m-%d %H:%M') }} UTC・{{ o.aspect }}</div>
+    <div class="row">
+      <a class="btn" href="{{ url_for('views.output_download', oid=o.id) }}">ダウンロード</a>
+      <form method="post" action="{{ url_for('views.output_delete', oid=o.id) }}" data-confirm="この作品を削除しますか？">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn danger" type="submit">削除</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty card">まだ作品はありません。<a href="{{ url_for('views.home') }}">ホーム</a>から作れます。</div>
+{% endif %}
+
+<h2>追加した動画</h2>
+{% if videos %}
+<table>
+  <thead><tr><th scope="col">名前</th><th scope="col">状態</th><th scope="col">長さ</th></tr></thead>
+  <tbody>
+  {% for v in videos %}
+  <tr>
+    <td class="truncate" style="max-width: 280px"><a href="{{ url_for('views.video_page', video_id=v.id) }}">{{ v.template.title if v.template else v.original_name }}</a></td>
+    <td>{% if v.safety_status == 'passed' %}<span class="badge ok">使える</span>{% elif v.safety_status == 'blocked' %}<span class="badge bad">使えない</span>{% else %}<span class="badge wait">確認中</span>{% endif %}</td>
+    <td>{{ v.duration_s or '—' }}秒</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty card">まだ動画はありません。</div>
+{% endif %}
+{% endblock %}

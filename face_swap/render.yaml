@@ -1,0 +1,91 @@
+# Render blueprint for face-swap. Secret values are entered in the Render dashboard, not here.
+# C2PA files go in Render "Secret Files" as c2pa_chain.pem and c2pa_key.pem (mounted at /etc/secrets).
+services:
+- type: web
+  name: face-swap-web
+  runtime: docker
+  rootDir: face_swap
+  dockerfilePath: ./Dockerfile
+  healthCheckPath: /healthz
+  envVars:
+  - key: APP_ENV
+    value: production
+  - key: STORAGE
+    value: r2
+  - key: SAFETY
+    value: claude
+  - key: SECRET_KEY
+    generateValue: true
+  - key: DATABASE_URL
+    fromDatabase:
+      name: face-swap-db
+      property: connectionString
+  - key: OWNER_EMAIL
+    sync: false
+  - key: OWNER_PASSWORD_HASH
+    sync: false
+  - key: ANTHROPIC_API_KEY
+    sync: false
+  - key: FACESWAP_PROVIDER
+    sync: false
+  - key: FACESWAP_PRICE_PER_SECOND_USD
+    sync: false
+  - key: DAILY_SPEND_LIMIT_USD
+    value: '5'
+  - key: R2_ENDPOINT
+    sync: false
+  - key: R2_BUCKET
+    sync: false
+  - key: R2_ACCESS_KEY_ID
+    sync: false
+  - key: R2_SECRET_ACCESS_KEY
+    sync: false
+  - key: C2PA_CERT_CHAIN_PATH
+    value: /etc/secrets/c2pa_chain.pem
+  - key: C2PA_PRIVATE_KEY_PATH
+    value: /etc/secrets/c2pa_key.pem
+- type: worker
+  name: face-swap-worker
+  runtime: docker
+  rootDir: face_swap
+  dockerfilePath: ./Dockerfile
+  dockerCommand: python worker.py
+  envVars:
+  - key: APP_ENV
+    value: production
+  - key: STORAGE
+    value: r2
+  - key: SAFETY
+    value: claude
+  - key: SECRET_KEY
+    generateValue: true
+  - key: DATABASE_URL
+    fromDatabase:
+      name: face-swap-db
+      property: connectionString
+  - key: OWNER_EMAIL
+    sync: false
+  - key: OWNER_PASSWORD_HASH
+    sync: false
+  - key: ANTHROPIC_API_KEY
+    sync: false
+  - key: FACESWAP_PROVIDER
+    sync: false
+  - key: FACESWAP_PRICE_PER_SECOND_USD
+    sync: false
+  - key: DAILY_SPEND_LIMIT_USD
+    value: '5'
+  - key: R2_ENDPOINT
+    sync: false
+  - key: R2_BUCKET
+    sync: false
+  - key: R2_ACCESS_KEY_ID
+    sync: false
+  - key: R2_SECRET_ACCESS_KEY
+    sync: false
+  - key: C2PA_CERT_CHAIN_PATH
+    value: /etc/secrets/c2pa_chain.pem
+  - key: C2PA_PRIVATE_KEY_PATH
+    value: /etc/secrets/c2pa_key.pem
+databases:
+- name: face-swap-db

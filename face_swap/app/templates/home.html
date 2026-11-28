@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}ホーム | face-swap{% endblock %}
+{% block content %}
+<h1>どの動画で作りますか？</h1>
+{% if not has_face %}
+<p class="notice">まだ自分の顔が登録されていません。<a href="{{ url_for('views.face_page') }}">カメラで登録する</a></p>
+{% endif %}
+<div class="row">
+  <a class="btn primary" href="{{ url_for('views.upload_page') }}">自分の動画を使う</a>
+</div>
+
+<h2>テンプレート</h2>
+<form method="get" class="row" aria-label="テンプレートの絞り込み">
+  <div><label for="aspect">向き</label>
+    <select id="aspect" name="aspect" onchange="this.form.submit()">
+      <option value="" {% if not aspect %}selected{% endif %}>すべて</option>
+      <option value="9:16" {% if aspect == '9:16' %}selected{% endif %}>縦 9:16</option>
+      <option value="16:9" {% if aspect == '16:9' %}selected{% endif %}>横 16:9</option>
+    </select></div>
+  {% if categories %}
+  <div><label for="category">カテゴリ</label>
+    <select id="category" name="category" onchange="this.form.submit()">
+      <option value="">すべて</option>
+      {% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select></div>
+  {% endif %}
+  <noscript><button class="btn" type="submit">絞り込む</button></noscript>
+</form>
+{% if templates %}
+<div class="grid" style="margin-top: var(--space-4);">
+  {% for t in templates %}
+  <a class="card" href="{{ url_for('views.template_detail', tid=t.id) }}" style="text-decoration:none;color:inherit">
+    {% if t.video.detected_faces %}<img class="thumb" src="{{ url_for('views.person_thumb', video_id=t.video.id, idx=0) }}" alt="">{% endif %}
+    <div class="truncate" style="margin-top: var(--space-2); font-weight: 600;">{{ t.title }}</div>
+    <div class="muted">{{ t.category or 'カテゴリなし' }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty card">テンプレートはまだありません。自分で撮った動画を追加して「テンプレートにする」を押すと、ここに並びます。</div>
+{% endif %}
+
+<h2>最近の作品</h2>
+{% if recent %}
+<div class="grid">
+  {% for o in recent %}
+  <a class="card" href="{{ url_for('views.job_page', job_id=o.job_id) }}" style="text-decoration:none;color:inherit">
+    <div class="muted">{{ o.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</div>
+    <div><span class="badge ok">AI生成の表示つき</span> {{ o.aspect }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty card">まだ作品はありません。</div>
+{% endif %}
+{% endblock %}

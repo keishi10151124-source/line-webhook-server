@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}費用 | face-swap{% endblock %}
+{% block content %}
+<h1>費用</h1>
+<p>今日：${{ '%.2f'|format(today) }}（1日の上限 ${{ '%.2f'|format(limit) }}）</p>
+<h2>今月</h2>
+{% if rows %}
+<table>
+  <thead><tr><th scope="col">サービス</th><th scope="col">回数</th><th scope="col">金額</th></tr></thead>
+  <tbody>{% for svc, micro, n in rows %}<tr><td>{{ {'faceswap':'顔の入れ替え','claude':'安全チェック（Claude）','storage':'保存'}.get(svc, svc) }}</td><td>{{ n }}</td><td>${{ '%.4f'|format((micro or 0) / 1000000) }}</td></tr>{% endfor %}</tbody>
+</table>
+{% else %}
+<div class="empty card">今月の費用はまだありません。</div>
+{% endif %}
+<p class="muted">金額は設定した単価からの目安です。正確な請求は各サービスの管理画面で確認してください。</p>
+{% endblock %}

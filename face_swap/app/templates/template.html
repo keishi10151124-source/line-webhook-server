@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ t.title }} | face-swap{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('views.home') }}">← ホーム</a></p>
+<h1 class="truncate">{{ t.title }}</h1>
+<div class="card stack">
+  <video controls preload="metadata" src="{{ url_for('views.video_file', video_id=t.video.id) }}"></video>
+  <p class="muted">素材の権利：{{ t.license_note }}</p>
+  <p class="muted">映っている人：{{ t.video.detected_faces|length }}人</p>
+  <a class="btn primary" href="{{ url_for('views.video_page', video_id=t.video.id) }}">この動画を使う</a>
+</div>
+{% endblock %}
