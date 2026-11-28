@@ -1,11 +1,10 @@
 # Render blueprint for face-swap. Secret values are entered in the Render dashboard, not here.
 # The C2PA signing certificate is created automatically on first start.
-# Web is on the free plan: it sleeps when idle and takes about a minute to wake up.
 services:
 - type: web
   name: face-swap-web
   runtime: docker
-  plan: free
+  plan: starter
   rootDir: face_swap
   dockerfilePath: ./Dockerfile
   healthCheckPath: /healthz
